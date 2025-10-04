@@ -8,7 +8,9 @@ from pathlib import Path
 import numpy as np 
 from collections import Counter 
 import time
+# Adicionando a importação da PIL Image para a verificação de tipo (mantido)
 from PIL import Image 
+# IMPORTANTE: Adicionando 'io' para manipulação de bytes
 import io 
 
 # ===============================
@@ -20,14 +22,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializa o estado da sessão 
+# Inicializa o estado da sessão (mantido por consistência, mas o loop foi removido)
 if 'camera_input_key' not in st.session_state:
     st.session_state.camera_input_key = 0
 
 # ===============================
 # Configuração Fixo de Confiança
 # ===============================
-# Limite de confiança fixado em 50% (0.50)
+# Limite de confiança fixado em 50% (0.50) para um equilíbrio entre sensibilidade e falsos positivos.
 conf_threshold = 0.50 
 
 
@@ -93,12 +95,12 @@ CLASS_COLORS = get_class_colors()
 @st.cache_resource
 def load_model():
     """Carrega o modelo treinado a partir da raiz do projeto."""
+    # Caminho ajustado para best.pt na raiz (C:\TCCWEB\best.pt)
     model_path = "best.pt" 
     if not os.path.exists(model_path):
         st.error(f"Erro: Arquivo do modelo '{model_path}' não encontrado. Certifique-se de que o arquivo 'best.pt' está na pasta raiz do seu projeto.")
         return None
     try:
-        # Tenta carregar o modelo YOLO.
         return YOLO(model_path)
     except Exception as e:
         st.error(f"Erro ao carregar o modelo YOLO. Verifique se o arquivo está correto. Erro: {e}")
@@ -148,9 +150,10 @@ selected_epis = st.sidebar.multiselect(
 
 def process_detection(source, selected_epis):
     """
-    Roda a inferência, forçando o uso de CPU e limitando o tamanho da imagem 
-    para maior estabilidade em ambientes web.
+    Roda a inferência. Source é um objeto de arquivo (UploadedFile ou CameraInput).
+    Usa o valor de conf_threshold fixo (0.50) e NÃO exibe a confiança no resultado.
     """
+    # A variável global conf_threshold (0.50) será usada internamente.
     global conf_threshold 
 
     if model is None:
@@ -169,9 +172,10 @@ def process_detection(source, selected_epis):
         img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         if img_bgr is None:
-            st.error("Erro Crítico de Leitura: Falha ao decodificar a imagem.")
+            st.error("Erro Crítico de Leitura: cv2.imdecode retornou None. O arquivo de imagem pode estar corrompido ou o formato não é suportado pelo OpenCV.")
             return None, [], set(), set(), set()
             
+        # O array RGB é a nossa imagem de segurança.
         result_img_rgb = cv2.cvtColor(img_bgr.copy(), cv2.COLOR_BGR2RGB)
     
     except Exception as e:
@@ -179,25 +183,21 @@ def process_detection(source, selected_epis):
         return None, [], set(), set(), set()
         
     # -----------------------------------------------------------------
-    # PARTE 2: Inferência YOLO (Otimizada para CPU)
+    # PARTE 2: Inferência YOLO (Defensiva)
     # -----------------------------------------------------------------
     try:
-        # *** AJUSTE CRÍTICO: Força o uso da CPU ('device="cpu"') e otimiza o tamanho da imagem (imgsz=640) ***
-        results = model(
-            img_bgr, 
-            conf=conf_threshold, 
-            device='cpu',  # Garante execução em CPU para estabilidade na nuvem
-            imgsz=640,     # Reduz o tamanho de entrada para melhorar a performance em CPU
-            save=False, 
-            verbose=False
-        ) 
+        # 4. Rodar inferência DIRETAMENTE no array NumPy (img_bgr) usando o valor fixo
+        results = model(img_bgr, conf=conf_threshold, save=False, verbose=False) 
         
+        # PROVA DE FALHA CRÍTICA: Se a inferência falhar (ex: retorna None ou não lista)
         if not results or not isinstance(results, list):
-             st.error("Erro na Inferência: O modelo YOLO retornou um resultado inesperado.")
+             st.error("Erro na Inferência: O modelo YOLO retornou um resultado inesperado (vazio ou formato incorreto). Retornando a imagem original.")
+             # Retorna a imagem decodificada, garantindo que o app não quebre.
              return result_img_rgb, [], set(), set(), set() 
              
     except Exception as e:
         st.error(f"Erro Crítico na Inferência YOLO: Ocorreu uma exceção durante a execução do modelo. Erro: {e}")
+        # Retorna a imagem decodificada, garantindo que o app não quebre.
         return result_img_rgb, [], set(), set(), set()
     
     
@@ -213,6 +213,7 @@ def process_detection(source, selected_epis):
         for box in r.boxes:
             cls = int(box.cls[0])
             eng_label = r.names[cls] 
+            # A imagem para desenho é 'result_img_rgb' (RGB)
             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
 
             pt_label = label_map_model_to_friendly.get(eng_label)
@@ -231,11 +232,11 @@ def process_detection(source, selected_epis):
             color_rgb = CLASS_COLORS.get(cls, (255, 255, 255)) 
             detected_labels.append(pt_label)
 
-            # --- APENAS NOME DO EPI ---
+            # --- APENAS NOME DO EPI (sem percentual de confiança) ---
             cv2.rectangle(result_img_rgb, (x1, y1), (x2, y2), color_rgb, 2)
             cv2.putText(
                 result_img_rgb,
-                f"{pt_label}", 
+                f"{pt_label}", # Apenas o nome do EPI
                 (x1, y1 - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
@@ -246,9 +247,12 @@ def process_detection(source, selected_epis):
             # --------------------------------------------------------
 
     # Verificar atendidos x faltantes
+    # Aqui, garantimos que "Pessoa" não conte como EPI na lógica de conformidade
     detected_set = set([label for label in detected_labels if label != 'Pessoa'])
     selected_set = set(selected_epis)
+    # EPIs Atendidos (detectados E selecionados para monitoramento)
     atendidos = detected_set.intersection(selected_set)
+    # EPIs Faltantes (selecionados para monitoramento E NÃO detectados)
     faltantes = selected_set - detected_set
     
     # ===============================
@@ -313,7 +317,7 @@ def generate_report_content(selected_epis, atendidos, faltantes, detected_set, p
     
     st.markdown(f"**Pessoas detectadas:** {len(person_boxes)}")
     st.markdown(f"**EPIs Monitorados:** {len(selected_epis)}")
-    st.markdown(f"**Confiança Mínima:** {conf_threshold:.2f} (Otimizado para Web/CPU)") # Exibe a confiança ajustada
+    st.markdown(f"**Confiança Mínima:** {conf_threshold:.2f} (Não exibido na imagem)") # Exibe a confiança ajustada
     st.markdown("---")
 
     # 1. Mensagem de alerta/sucesso
@@ -355,7 +359,7 @@ def generate_report_content(selected_epis, atendidos, faltantes, detected_set, p
 # Área principal
 # ===============================
 st.title("🦺 Sistema de Detecção de EPIs")
-st.write("Esta versão é otimizada para implantação em nuvem (CPU). Use 'Câmera (Snapshot)' para capturar fotos instantâneas.")
+st.write("Esta versão é otimizada para implantação em nuvem. Use 'Câmera (Snapshot)' para capturar fotos instantâneas.")
 st.markdown("---")
 
 # ----------------------------------------------------
@@ -381,6 +385,7 @@ placeholder_col1, placeholder_col2 = st.columns([2, 1])
 with placeholder_col1:
     if input_mode == "Câmera (Snapshot)":
         st.subheader("1. Câmera (Snapshot)")
+        # st.camera_input é a maneira Cloud-Safe de acessar a câmera
         input_file = st.camera_input(
             "Tire uma foto para análise:",
             key=st.session_state.camera_input_key
@@ -395,14 +400,17 @@ with placeholder_col1:
 # Executa a detecção se houver um arquivo de entrada
 if input_file is not None:
     
+    # Roda o processamento, USANDO A FUNÇÃO ATUALIZADA SEM O ARGUMENTO DE CONFIANÇA
     processed_img_rgb, person_boxes, atendidos, faltantes, detected_set = process_detection(
         input_file, 
         selected_epis
     )
     
+    # === PONTO DE PROTEÇÃO FINAL E CORREÇÃO DO ARGUMENTO STREAMLIT ===
     if processed_img_rgb is not None and isinstance(processed_img_rgb, np.ndarray):
         
         with placeholder_col1:
+            # CORRIGIDO: use_container_width -> use_column_width
             st.image(processed_img_rgb, use_column_width=True, caption="Resultado da Detecção com Alerta")
 
             # Botão de download
@@ -420,5 +428,6 @@ if input_file is not None:
             generate_report_content(selected_epis, atendidos, faltantes, detected_set, person_boxes)
             
     else:
+        # Mensagem de fallback, caso process_detection retorne None por algum motivo
         with placeholder_col1:
             st.warning("Não foi possível processar a imagem. Verifique as mensagens de erro detalhadas acima.")
