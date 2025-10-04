@@ -1,0 +1,29 @@
+Ignorar ambientes virtuais
+
+venv/
+venv_tcc/
+Ignorar arquivos de modelo que não são o final (se best.pt for o único que você precisa)
+
+yolov8m.pt
+yolov8n.pt
+yolo11n.pt
+Ignorar pastas de treino, validação e resultados
+
+dataset/
+runs/
+voc_labels/
+meta-data/
+Ignorar arquivos auxiliares de treino
+
+*_files.txt
+check_dataset.py
+inference.py
+retreina_modelo.py
+split_images.py
+test.py
+train.py
+train_2.py
+valida_modelo.py
+Ignorar seu arquivo de requisitos antigo
+
+requirementes.txt # Percebi que você escreveu errado 'requirementes.txt', ignorando também

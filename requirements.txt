@@ -1,0 +1,21 @@
+# Framework principal
+streamlit==1.36.0
+
+# YOLOv8 (Ultralytics)
+ultralytics==8.3.19
+
+# PyTorch (com CPU por padrão; no local usa GPU se disponível)
+torch==2.3.1
+torchvision==0.18.1
+
+# Processamento de imagens e vídeo
+opencv-python-headless==4.8.0.76  # versão sem GUI (necessária no Streamlit Cloud)
+Pillow==10.4.0
+
+# Utilitários
+numpy==1.26.4
+requests==2.32.3
+matplotlib==3.9.2
+
+# Evita warning no Streamlit Cloud
+protobuf==4.25.3
