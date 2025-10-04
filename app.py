@@ -394,12 +394,12 @@ if input_file is not None:
         selected_epis
     )
     
-    # === PONTO DE PROTEÇÃO FINAL ===
-    # Esta linha é a 389 na sua contagem (aproximadamente)
+    # === PONTO DE PROTEÇÃO FINAL E CORREÇÃO DO ARGUMENTO STREAMLIT ===
     if processed_img_rgb is not None and isinstance(processed_img_rgb, np.ndarray):
         
         with placeholder_col1:
-            st.image(processed_img_rgb, use_container_width=True, caption="Resultado da Detecção com Alerta")
+            # CORRIGIDO: use_container_width -> use_column_width
+            st.image(processed_img_rgb, use_column_width=True, caption="Resultado da Detecção com Alerta")
 
             # Botão de download
             result_img_bgr_dl = cv2.cvtColor(processed_img_rgb, cv2.COLOR_RGB2BGR)
