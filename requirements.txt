@@ -1,16 +1,9 @@
-Versões de frameworks principais
-
 streamlit==1.36.0
 numpy==1.26.4
 requests==2.32.3
 protobuf==4.25.3
-Versões Otimizadas para Streamlit Cloud
-Usando versões mais antigas do PyTorch e Ultralytics para evitar erros de ABI/wheels na nuvem.
-
 torch==2.1.0
 ultralytics==8.0.20
-Processamento de imagens e vídeo
-
 opencv-python-headless==4.8.0.76
 Pillow==10.4.0
 matplotlib==3.9.2
