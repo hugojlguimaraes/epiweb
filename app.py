@@ -27,9 +27,15 @@ if 'camera_input_key' not in st.session_state:
     st.session_state.camera_input_key = 0
 
 # ===============================
-# Configuração Fixo de Confiança e Alerta Sonoro
+# Configuração Fixo de Confiança
 # ===============================
-conf_threshold = 0.50 # Valor fixo de confiança
+# Limite de confiança fixado em 40% (0.4)
+conf_threshold = 0.40 
+
+
+# ===============================
+# Configuração Fixo de Alerta Sonoro
+# ===============================
 
 # Áudio de bipe curto em Base64 (WAV simples, cerca de 0.1s de duração)
 ALERT_SOUND_BASE64 = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAAAAJAAA" 
@@ -145,8 +151,11 @@ selected_epis = st.sidebar.multiselect(
 def process_detection(source, selected_epis):
     """
     Roda a inferência. Source é um objeto de arquivo (UploadedFile ou CameraInput).
-    Lê o arquivo diretamente para array NumPy e passa para a inferência.
+    Usa o valor de conf_threshold fixo (0.40) e NÃO exibe a confiança no resultado.
     """
+    # A variável global conf_threshold (0.40) será usada internamente.
+    global conf_threshold 
+
     if model is None:
         return None, [], set(), set(), set()
         
@@ -177,7 +186,7 @@ def process_detection(source, selected_epis):
     # PARTE 2: Inferência YOLO (Defensiva)
     # -----------------------------------------------------------------
     try:
-        # 4. Rodar inferência DIRETAMENTE no array NumPy (img_bgr)
+        # 4. Rodar inferência DIRETAMENTE no array NumPy (img_bgr) usando o valor fixo
         results = model(img_bgr, conf=conf_threshold, save=False, verbose=False) 
         
         # PROVA DE FALHA CRÍTICA: Se a inferência falhar (ex: retorna None ou não lista)
@@ -223,10 +232,13 @@ def process_detection(source, selected_epis):
             color_rgb = CLASS_COLORS.get(cls, (255, 255, 255)) 
             detected_labels.append(pt_label)
 
+            # --- CORREÇÃO: Remoção do score de confiança da label exibida ---
+            # Antes: f"{pt_label} {score:.2f}"
+            # Agora: f"{pt_label}"
             cv2.rectangle(result_img_rgb, (x1, y1), (x2, y2), color_rgb, 2)
             cv2.putText(
                 result_img_rgb,
-                f"{pt_label}", 
+                f"{pt_label}", # Apenas o nome do EPI
                 (x1, y1 - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
@@ -234,6 +246,7 @@ def process_detection(source, selected_epis):
                 2,
                 cv2.LINE_AA
             )
+            # ---------------------------------------------------------------
 
     # Verificar atendidos x faltantes
     # Aqui, garantimos que "Pessoa" não conte como EPI na lógica de conformidade
@@ -306,6 +319,7 @@ def generate_report_content(selected_epis, atendidos, faltantes, detected_set, p
     
     st.markdown(f"**Pessoas detectadas:** {len(person_boxes)}")
     st.markdown(f"**EPIs Monitorados:** {len(selected_epis)}")
+    st.markdown(f"**Confiança Mínima:** {conf_threshold:.2f} (Não exibido na imagem)") # Atualiza a nota de confiança
     st.markdown("---")
 
     # 1. Mensagem de alerta/sucesso
@@ -388,7 +402,7 @@ with placeholder_col1:
 # Executa a detecção se houver um arquivo de entrada
 if input_file is not None:
     
-    # Roda o processamento
+    # Roda o processamento, USANDO A FUNÇÃO ATUALIZADA SEM O ARGUMENTO DE CONFIANÇA
     processed_img_rgb, person_boxes, atendidos, faltantes, detected_set = process_detection(
         input_file, 
         selected_epis
