@@ -2,8 +2,9 @@ streamlit==1.36.0
 numpy==1.26.4
 requests==2.32.3
 protobuf==4.25.3
-torch==2.1.0
-ultralytics==8.0.20
-opencv-python-headless==4.8.0.76
 Pillow==10.4.0
 matplotlib==3.9.2
+Ultralytics 8.3.x
+torch==2.3.1
+ultralytics==8.3.19
+opencv-python-headless==4.8.0.76
