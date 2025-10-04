@@ -4,6 +4,6 @@ requests==2.32.3
 protobuf==4.25.3
 Pillow==10.4.0
 matplotlib==3.9.2
-torch==2.5.0
+torch==2.8.0
 ultralytics==8.3.19
 opencv-python-headless==4.8.0.76
