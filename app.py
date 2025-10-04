@@ -139,61 +139,46 @@ selected_epis = st.sidebar.multiselect(
 )
 
 # ===============================
-# Função Principal de Detecção (Adaptada para Frame ou Arquivo)
+# Função Principal de Detecção (USANDO ARRAY NUMPY DIRETO)
 # ===============================
 
 def process_detection(source, selected_epis):
     """
     Roda a inferência. Source é um objeto de arquivo (UploadedFile ou CameraInput).
-    Lê o arquivo diretamente para memória.
+    Lê o arquivo diretamente para array NumPy e passa para a inferência.
     """
     if model is None:
         return None, [], set(), set(), set()
         
     result_img_rgb = None 
-    temp_path = ""
     
     try:
         # 1. LER ARQUIVO PARA BYTES
-        # Reseta o ponteiro do arquivo para o início, caso tenha sido lido antes
         source.seek(0)
         image_bytes = source.read()
         
-        # 2. CONVERTER BYTES PARA ARRAY NUMPY USANDO OPENCV (melhor em cloud)
-        # O numpy.frombuffer cria um array a partir dos bytes lidos
+        # 2. CONVERTER BYTES PARA ARRAY NUMPY USANDO OPENCV
         np_arr = np.frombuffer(image_bytes, np.uint8)
-        # O cv2.imdecode decodifica o array (que contém a imagem) para uma imagem OpenCV (BGR)
         img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         # 3. VERIFICAR FALHA NA DECODIFICAÇÃO
         if img_bgr is None:
-            st.error("Erro: Não foi possível decodificar a imagem. O arquivo pode estar corrompido ou o formato é inválido.")
+            st.error("Erro: Não foi possível decodificar a imagem (cv2.imdecode retornou None). O arquivo pode estar corrompido ou o formato é inválido.")
             return None, [], set(), set(), set()
             
         # Converter para RGB para exibição no Streamlit
-        result_img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        # Criamos uma cópia para desenhar em cima, mantendo a original (img_bgr) para o YOLO
+        result_img_rgb = cv2.cvtColor(img_bgr.copy(), cv2.COLOR_BGR2RGB)
         
-        # 4. SALVAR TEMPORARIAMENTE PARA A INFERÊNCIA DA ULTRALYTICS
-        # Infelizmente, a função 'model()' da Ultralytics geralmente requer um caminho de arquivo.
-        # Por isso, precisamos salvar rapidamente, mas garantimos que a leitura da imagem (o passo mais problemático)
-        # já foi feito de forma robusta.
-        file_extension = Path(source.name).suffix if source.name else ".jpg"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
-            tmp.write(image_bytes) # Escreve os bytes que já lemos
-            temp_path = tmp.name
-        
-        # 5. Rodar inferência no arquivo temporário
-        results = model(temp_path, conf=conf_threshold, save=False, verbose=False) 
+        # 4. Rodar inferência DIRETAMENTE no array NumPy (img_bgr)
+        # O YOLO pode receber o array BGR do OpenCV diretamente.
+        results = model(img_bgr, conf=conf_threshold, save=False, verbose=False) 
     
     except Exception as e:
         # Este catch agora pega erros na leitura/decodificação OU na inferência
-        st.error(f"Erro ao rodar o processamento (leitura/inferência). Erro: {e}")
+        st.error(f"Erro Crítico ao rodar o processamento (Inferência YOLO ou Conversão CV2). Erro: {e}")
         return None, [], set(), set(), set()
-    finally:
-        # Garante a limpeza do arquivo temporário
-        if os.path.exists(temp_path):
-            os.remove(temp_path) 
-        
+    
     
     detected_labels = []
     person_boxes = [] 
@@ -203,7 +188,7 @@ def process_detection(source, selected_epis):
         for box in r.boxes:
             cls = int(box.cls[0])
             eng_label = r.names[cls] 
-            # A imagem para desenho é 'result_img_rgb' que foi criada a partir de img_bgr
+            # A imagem para desenho é 'result_img_rgb' (RGB)
             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
 
             pt_label = label_map_model_to_friendly.get(eng_label)
@@ -396,6 +381,7 @@ if input_file is not None:
     # === CORREÇÃO CRÍTICA DO FLUXO DE RENDERIZAÇÃO ===
     # Agora, todo o bloco de exibição de resultados (imagem, download e relatório)
     # é executado apenas se a imagem foi processada com sucesso (array NumPy válido).
+    # Esta é a linha 403 (na sua contagem, esta linha pode ser ligeiramente diferente, mas é o st.image)
     if processed_img_rgb is not None and isinstance(processed_img_rgb, np.ndarray):
         
         with placeholder_col1:
@@ -420,4 +406,4 @@ if input_file is not None:
     else:
         # Exibe uma mensagem de status se o processamento falhar ou retornar None
         with placeholder_col1:
-            st.info("Aguardando processamento. Verifique se há mensagens de erro acima, caso o resultado não apareça.")
+            st.info("Aguardando processamento ou a decodificação da imagem falhou. Verifique as mensagens de erro.")
