@@ -152,36 +152,52 @@ def process_detection(source, selected_epis):
         
     result_img_rgb = None 
     
+    # -----------------------------------------------------------------
+    # PARTE 1: Leitura da Imagem (Defensiva)
+    # -----------------------------------------------------------------
     try:
-        # 1. LER ARQUIVO PARA BYTES
         source.seek(0)
         image_bytes = source.read()
         
-        # 2. CONVERTER BYTES PARA ARRAY NUMPY USANDO OPENCV
         np_arr = np.frombuffer(image_bytes, np.uint8)
         img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        # 3. VERIFICAR FALHA NA DECODIFICAÇÃO
         if img_bgr is None:
-            st.error("Erro: Não foi possível decodificar a imagem (cv2.imdecode retornou None). O arquivo pode estar corrompido ou o formato é inválido.")
+            st.error("Erro Crítico de Leitura: cv2.imdecode retornou None. O arquivo de imagem pode estar corrompido ou o formato não é suportado pelo OpenCV.")
             return None, [], set(), set(), set()
             
-        # Converter para RGB para exibição no Streamlit
-        # Criamos uma cópia para desenhar em cima, mantendo a original (img_bgr) para o YOLO
+        # O array RGB é a nossa imagem de segurança.
         result_img_rgb = cv2.cvtColor(img_bgr.copy(), cv2.COLOR_BGR2RGB)
-        
-        # 4. Rodar inferência DIRETAMENTE no array NumPy (img_bgr)
-        # O YOLO pode receber o array BGR do OpenCV diretamente.
-        results = model(img_bgr, conf=conf_threshold, save=False, verbose=False) 
     
     except Exception as e:
-        # Este catch agora pega erros na leitura/decodificação OU na inferência
-        st.error(f"Erro Crítico ao rodar o processamento (Inferência YOLO ou Conversão CV2). Erro: {e}")
+        st.error(f"Erro Crítico de Leitura/Decodificação: Falha ao converter o arquivo para array NumPy. Erro: {e}")
         return None, [], set(), set(), set()
+        
+    # -----------------------------------------------------------------
+    # PARTE 2: Inferência YOLO (Defensiva)
+    # -----------------------------------------------------------------
+    try:
+        # 4. Rodar inferência DIRETAMENTE no array NumPy (img_bgr)
+        results = model(img_bgr, conf=conf_threshold, save=False, verbose=False) 
+        
+        # PROVA DE FALHA CRÍTICA: Se a inferência falhar (ex: retorna None ou não lista)
+        if not results or not isinstance(results, list):
+             st.error("Erro na Inferência: O modelo YOLO retornou um resultado inesperado (vazio ou formato incorreto). Retornando a imagem original.")
+             # Retorna a imagem decodificada, garantindo que o app não quebre.
+             return result_img_rgb, [], set(), set(), set() 
+             
+    except Exception as e:
+        st.error(f"Erro Crítico na Inferência YOLO: Ocorreu uma exceção durante a execução do modelo. Erro: {e}")
+        # Retorna a imagem decodificada, garantindo que o app não quebre.
+        return result_img_rgb, [], set(), set(), set()
     
     
     detected_labels = []
     person_boxes = [] 
+    
+    # -----------------------------------------------------------------
+    # PARTE 3: Desenho e Lógica
+    # -----------------------------------------------------------------
     
     # Desenhar manualmente e coletar detecções
     for r in results:
@@ -378,14 +394,11 @@ if input_file is not None:
         selected_epis
     )
     
-    # === CORREÇÃO CRÍTICA DO FLUXO DE RENDERIZAÇÃO ===
-    # Agora, todo o bloco de exibição de resultados (imagem, download e relatório)
-    # é executado apenas se a imagem foi processada com sucesso (array NumPy válido).
-    # Esta é a linha 403 (na sua contagem, esta linha pode ser ligeiramente diferente, mas é o st.image)
+    # === PONTO DE PROTEÇÃO FINAL ===
+    # Esta linha é a 389 na sua contagem (aproximadamente)
     if processed_img_rgb is not None and isinstance(processed_img_rgb, np.ndarray):
         
         with placeholder_col1:
-            # LINHA QUE CAUSAVA ERRO AGORA ESTÁ PROTEGIDA
             st.image(processed_img_rgb, use_container_width=True, caption="Resultado da Detecção com Alerta")
 
             # Botão de download
@@ -400,10 +413,9 @@ if input_file is not None:
 
         with placeholder_col2:
             st.subheader("📊 Relatório")
-            # O relatório agora é gerado apenas se o processamento for bem-sucedido
             generate_report_content(selected_epis, atendidos, faltantes, detected_set, person_boxes)
             
     else:
-        # Exibe uma mensagem de status se o processamento falhar ou retornar None
+        # Mensagem de fallback, caso process_detection retorne None por algum motivo
         with placeholder_col1:
-            st.info("Aguardando processamento ou a decodificação da imagem falhou. Verifique as mensagens de erro.")
+            st.warning("Não foi possível processar a imagem. Verifique as mensagens de erro detalhadas acima.")
