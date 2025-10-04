@@ -29,8 +29,8 @@ if 'camera_input_key' not in st.session_state:
 # ===============================
 # Configuração Fixo de Confiança
 # ===============================
-# Limite de confiança fixado em 10% (0.10) - ATENÇÃO: pode aumentar falsos positivos!
-conf_threshold = 0.10 
+# Limite de confiança fixado em 50% (0.50) para um equilíbrio entre sensibilidade e falsos positivos.
+conf_threshold = 0.50 
 
 
 # ===============================
@@ -151,9 +151,9 @@ selected_epis = st.sidebar.multiselect(
 def process_detection(source, selected_epis):
     """
     Roda a inferência. Source é um objeto de arquivo (UploadedFile ou CameraInput).
-    Usa o valor de conf_threshold fixo (0.10) e NÃO exibe a confiança no resultado.
+    Usa o valor de conf_threshold fixo (0.50) e NÃO exibe a confiança no resultado.
     """
-    # A variável global conf_threshold (0.10) será usada internamente.
+    # A variável global conf_threshold (0.50) será usada internamente.
     global conf_threshold 
 
     if model is None:
