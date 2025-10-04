@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np 
 from collections import Counter 
 import time
+from PIL import Image # Adicionando a importação da PIL Image para a verificação de tipo
 
 # ===============================
 # Configuração da página
@@ -147,25 +148,33 @@ def process_detection(source, selected_epis):
         
     # Salva o arquivo temporariamente para processamento pelo CV2/YOLO
     file_extension = Path(source.name).suffix if source.name else ".jpg"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
-        tmp.write(source.read())
-        temp_path = tmp.name
-    
-    # Carregar imagem original e converter para RGB
-    result_img_rgb = cv2.imread(temp_path, cv2.IMREAD_COLOR)
-    result_img_rgb = cv2.cvtColor(result_img_rgb, cv2.COLOR_BGR2RGB)
-    
-    # Rodar inferência
+    temp_path = ""
     try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
+            tmp.write(source.read())
+            temp_path = tmp.name
+    
+        # Carregar imagem original e verificar falha na leitura (cv2.imread retorna None em caso de falha)
+        result_img_rgb = cv2.imread(temp_path, cv2.IMREAD_COLOR)
+
+        # CORREÇÃO APLICADA AQUI: Verifica se a leitura da imagem falhou
+        if result_img_rgb is None:
+            st.error("Erro: Não foi possível ler a imagem do arquivo temporário. O arquivo pode estar corrompido.")
+            return None, [], set(), set(), set()
+
+        result_img_rgb = cv2.cvtColor(result_img_rgb, cv2.COLOR_BGR2RGB)
+    
+        # Rodar inferência
         # Passa o caminho do arquivo temporário para o modelo
         results = model(temp_path, conf=conf_threshold, save=False, verbose=False) 
+    
     except Exception as e:
-        st.error(f"Erro ao rodar a inferência. Erro: {e}")
-        os.remove(temp_path)
+        st.error(f"Erro ao rodar o processamento (leitura/inferência). Erro: {e}")
         return None, [], set(), set(), set()
     finally:
-        os.remove(temp_path) # Limpa o arquivo temporário
-
+        if os.path.exists(temp_path):
+            os.remove(temp_path) # Limpa o arquivo temporário
+        
     
     detected_labels = []
     person_boxes = [] 
@@ -364,9 +373,11 @@ if input_file is not None:
         selected_epis
     )
     
-    if processed_img_rgb is not None:
+    # Adicionando a verificação de tipo (embora a correção principal esteja dentro da função)
+    if processed_img_rgb is not None and isinstance(processed_img_rgb, np.ndarray):
         
         with placeholder_col1:
+            # LINHA 370 ORIGINALMENTE: st.image(...)
             st.image(processed_img_rgb, use_container_width=True, caption="Resultado da Detecção com Alerta")
 
             # Botão de download
