@@ -29,8 +29,8 @@ if 'camera_input_key' not in st.session_state:
 # ===============================
 # Configuração Fixo de Confiança
 # ===============================
-# Limite de confiança fixado em 40% (0.4)
-conf_threshold = 0.40 
+# Limite de confiança fixado em 10% (0.10) - ATENÇÃO: pode aumentar falsos positivos!
+conf_threshold = 0.10 
 
 
 # ===============================
@@ -151,9 +151,9 @@ selected_epis = st.sidebar.multiselect(
 def process_detection(source, selected_epis):
     """
     Roda a inferência. Source é um objeto de arquivo (UploadedFile ou CameraInput).
-    Usa o valor de conf_threshold fixo (0.40) e NÃO exibe a confiança no resultado.
+    Usa o valor de conf_threshold fixo (0.10) e NÃO exibe a confiança no resultado.
     """
-    # A variável global conf_threshold (0.40) será usada internamente.
+    # A variável global conf_threshold (0.10) será usada internamente.
     global conf_threshold 
 
     if model is None:
@@ -232,9 +232,7 @@ def process_detection(source, selected_epis):
             color_rgb = CLASS_COLORS.get(cls, (255, 255, 255)) 
             detected_labels.append(pt_label)
 
-            # --- CORREÇÃO: Remoção do score de confiança da label exibida ---
-            # Antes: f"{pt_label} {score:.2f}"
-            # Agora: f"{pt_label}"
+            # --- APENAS NOME DO EPI (sem percentual de confiança) ---
             cv2.rectangle(result_img_rgb, (x1, y1), (x2, y2), color_rgb, 2)
             cv2.putText(
                 result_img_rgb,
@@ -246,7 +244,7 @@ def process_detection(source, selected_epis):
                 2,
                 cv2.LINE_AA
             )
-            # ---------------------------------------------------------------
+            # --------------------------------------------------------
 
     # Verificar atendidos x faltantes
     # Aqui, garantimos que "Pessoa" não conte como EPI na lógica de conformidade
@@ -319,7 +317,7 @@ def generate_report_content(selected_epis, atendidos, faltantes, detected_set, p
     
     st.markdown(f"**Pessoas detectadas:** {len(person_boxes)}")
     st.markdown(f"**EPIs Monitorados:** {len(selected_epis)}")
-    st.markdown(f"**Confiança Mínima:** {conf_threshold:.2f} (Não exibido na imagem)") # Atualiza a nota de confiança
+    st.markdown(f"**Confiança Mínima:** {conf_threshold:.2f} (Não exibido na imagem)") # Exibe a confiança ajustada
     st.markdown("---")
 
     # 1. Mensagem de alerta/sucesso
