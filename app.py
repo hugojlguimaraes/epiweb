@@ -8,7 +8,10 @@ from pathlib import Path
 import numpy as np 
 from collections import Counter 
 import time
-from PIL import Image # Adicionando a importação da PIL Image para a verificação de tipo
+# Adicionando a importação da PIL Image para a verificação de tipo (mantido)
+from PIL import Image 
+# IMPORTANTE: Adicionando 'io' para manipulação de bytes
+import io 
 
 # ===============================
 # Configuração da página
@@ -142,41 +145,54 @@ selected_epis = st.sidebar.multiselect(
 def process_detection(source, selected_epis):
     """
     Roda a inferência. Source é um objeto de arquivo (UploadedFile ou CameraInput).
+    Lê o arquivo diretamente para memória.
     """
     if model is None:
         return None, [], set(), set(), set()
         
-    # Salva o arquivo temporariamente para processamento pelo CV2/YOLO
-    file_extension = Path(source.name).suffix if source.name else ".jpg"
-    temp_path = ""
-    # Inicializa a variável aqui, caso a leitura do arquivo temporário falhe antes do cv2.imread
     result_img_rgb = None 
+    temp_path = ""
     
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
-            tmp.write(source.read())
-            temp_path = tmp.name
-    
-        # Carregar imagem original e verificar falha na leitura (cv2.imread retorna None em caso de falha)
-        img_bgr = cv2.imread(temp_path, cv2.IMREAD_COLOR)
+        # 1. LER ARQUIVO PARA BYTES
+        # Reseta o ponteiro do arquivo para o início, caso tenha sido lido antes
+        source.seek(0)
+        image_bytes = source.read()
+        
+        # 2. CONVERTER BYTES PARA ARRAY NUMPY USANDO OPENCV (melhor em cloud)
+        # O numpy.frombuffer cria um array a partir dos bytes lidos
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        # O cv2.imdecode decodifica o array (que contém a imagem) para uma imagem OpenCV (BGR)
+        img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        # CORREÇÃO: Verifica se a leitura da imagem falhou
+        # 3. VERIFICAR FALHA NA DECODIFICAÇÃO
         if img_bgr is None:
-            st.error("Erro: Não foi possível ler a imagem do arquivo temporário. O arquivo pode estar corrompido.")
+            st.error("Erro: Não foi possível decodificar a imagem. O arquivo pode estar corrompido ou o formato é inválido.")
             return None, [], set(), set(), set()
-
+            
+        # Converter para RGB para exibição no Streamlit
         result_img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    
-        # Rodar inferência
-        # Passa o caminho do arquivo temporário para o modelo
+        
+        # 4. SALVAR TEMPORARIAMENTE PARA A INFERÊNCIA DA ULTRALYTICS
+        # Infelizmente, a função 'model()' da Ultralytics geralmente requer um caminho de arquivo.
+        # Por isso, precisamos salvar rapidamente, mas garantimos que a leitura da imagem (o passo mais problemático)
+        # já foi feito de forma robusta.
+        file_extension = Path(source.name).suffix if source.name else ".jpg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
+            tmp.write(image_bytes) # Escreve os bytes que já lemos
+            temp_path = tmp.name
+        
+        # 5. Rodar inferência no arquivo temporário
         results = model(temp_path, conf=conf_threshold, save=False, verbose=False) 
     
     except Exception as e:
+        # Este catch agora pega erros na leitura/decodificação OU na inferência
         st.error(f"Erro ao rodar o processamento (leitura/inferência). Erro: {e}")
         return None, [], set(), set(), set()
     finally:
+        # Garante a limpeza do arquivo temporário
         if os.path.exists(temp_path):
-            os.remove(temp_path) # Limpa o arquivo temporário
+            os.remove(temp_path) 
         
     
     detected_labels = []
@@ -187,6 +203,7 @@ def process_detection(source, selected_epis):
         for box in r.boxes:
             cls = int(box.cls[0])
             eng_label = r.names[cls] 
+            # A imagem para desenho é 'result_img_rgb' que foi criada a partir de img_bgr
             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
 
             pt_label = label_map_model_to_friendly.get(eng_label)
