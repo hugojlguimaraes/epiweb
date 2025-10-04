@@ -149,20 +149,23 @@ def process_detection(source, selected_epis):
     # Salva o arquivo temporariamente para processamento pelo CV2/YOLO
     file_extension = Path(source.name).suffix if source.name else ".jpg"
     temp_path = ""
+    # Inicializa a variável aqui, caso a leitura do arquivo temporário falhe antes do cv2.imread
+    result_img_rgb = None 
+    
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
             tmp.write(source.read())
             temp_path = tmp.name
     
         # Carregar imagem original e verificar falha na leitura (cv2.imread retorna None em caso de falha)
-        result_img_rgb = cv2.imread(temp_path, cv2.IMREAD_COLOR)
+        img_bgr = cv2.imread(temp_path, cv2.IMREAD_COLOR)
 
-        # CORREÇÃO APLICADA AQUI: Verifica se a leitura da imagem falhou
-        if result_img_rgb is None:
+        # CORREÇÃO: Verifica se a leitura da imagem falhou
+        if img_bgr is None:
             st.error("Erro: Não foi possível ler a imagem do arquivo temporário. O arquivo pode estar corrompido.")
             return None, [], set(), set(), set()
 
-        result_img_rgb = cv2.cvtColor(result_img_rgb, cv2.COLOR_BGR2RGB)
+        result_img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     
         # Rodar inferência
         # Passa o caminho do arquivo temporário para o modelo
@@ -373,11 +376,13 @@ if input_file is not None:
         selected_epis
     )
     
-    # Adicionando a verificação de tipo (embora a correção principal esteja dentro da função)
+    # === CORREÇÃO CRÍTICA DO FLUXO DE RENDERIZAÇÃO ===
+    # Agora, todo o bloco de exibição de resultados (imagem, download e relatório)
+    # é executado apenas se a imagem foi processada com sucesso (array NumPy válido).
     if processed_img_rgb is not None and isinstance(processed_img_rgb, np.ndarray):
         
         with placeholder_col1:
-            # LINHA 370 ORIGINALMENTE: st.image(...)
+            # LINHA QUE CAUSAVA ERRO AGORA ESTÁ PROTEGIDA
             st.image(processed_img_rgb, use_container_width=True, caption="Resultado da Detecção com Alerta")
 
             # Botão de download
@@ -392,4 +397,10 @@ if input_file is not None:
 
         with placeholder_col2:
             st.subheader("📊 Relatório")
+            # O relatório agora é gerado apenas se o processamento for bem-sucedido
             generate_report_content(selected_epis, atendidos, faltantes, detected_set, person_boxes)
+            
+    else:
+        # Exibe uma mensagem de status se o processamento falhar ou retornar None
+        with placeholder_col1:
+            st.info("Aguardando processamento. Verifique se há mensagens de erro acima, caso o resultado não apareça.")
