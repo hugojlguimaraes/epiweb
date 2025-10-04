@@ -1,2 +1,5 @@
 [server]
-python = 3.10
+# Comentário: O texto de explicação deve começar com '#' para ser ignorado pelo parser TOML.
+# A incompatibilidade PyTorch/Ultralytics foi resolvida no requirements.txt (torch==2.8.0).
+# A opção 'server.python' não é mais válida e foi removida para evitar o erro 'is not a valid config option'.
+# A linha original 'python = 3.10' foi excluída.
