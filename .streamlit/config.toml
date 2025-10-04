@@ -1,0 +1,4 @@
+[server]
+Forca o Streamlit Cloud a usar o Python 3.10 para compatibilidade com PyTorch
+
+python = 3.10
